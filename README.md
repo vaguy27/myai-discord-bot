@@ -1,12 +1,14 @@
 # MyAI.Bot Discord Bot
 
-A Discord bot that integrates with Ollama's Llama 3.2 model to answer questions in your Discord server.
+A Discord bot that integrates with Ollama to answer questions in your Discord server. Features configurable AI models with admin controls.
 
 ## Features
 
-- 🤖 AI-powered responses using Llama 3.2 via Ollama
+- 🤖 AI-powered responses via Ollama with configurable models
+- 🔧 Dynamic model switching (admin-only)
+- 📋 List available Ollama models
 - 🎯 Channel-specific responses (only responds in "myai-bot" channel)
-- 🔒 Admin-only shutdown command
+- 🔒 Admin-only shutdown and model management commands
 - 📱 Beautiful Discord embeds
 - ⚡ Async processing with typing indicators
 - 🛡️ Comprehensive error handling
@@ -27,7 +29,9 @@ A Discord bot that integrates with Ollama's Llama 3.2 model to answer questions 
 
 2. **Set up Ollama:**
    ```bash
-   ollama pull llama3.2
+   # Pull your desired models (default is gemma3:12b)
+   ollama pull gemma3:12b
+   ollama pull llama3.2  # or any other model you prefer
    ollama serve
    ```
 
@@ -54,9 +58,16 @@ A Discord bot that integrates with Ollama's Llama 3.2 model to answer questions 
 
 ## Commands
 
+### General Commands
 - `!ask me <question>` or `!askme <question>` - Ask the AI anything
-- `!shutdown` or `!myai shutdown` - Shutdown bot (admin only)  
 - `!help` or `!myai help` - Show help message
+
+### Model Management (Admin Only)
+- `!models` or `!model list` - List all available Ollama models
+- `!llm <model_name>` - Change the AI model (e.g., `!llm llama3.2`)
+
+### Admin Commands
+- `!shutdown` or `!myai shutdown` - Shutdown bot (admin only)
 
 ## Bot Permissions Needed
 
