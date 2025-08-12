@@ -6,6 +6,8 @@ import os
 import json
 from dotenv import load_dotenv
 import logging
+import uuid
+import io
 
 # Load environment variables
 load_dotenv()
@@ -13,6 +15,7 @@ load_dotenv()
 # Configuration
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
+COMFYUI_API_URL = os.getenv('COMFYUI_API_URL', 'http://localhost:8188')
 # Global variable for model name (can be changed with !llm command)
 current_model = 'gemma3:12b'
 TARGET_CHANNEL = 'myai-bot'
@@ -100,6 +103,154 @@ class MyAIBot:
         except Exception as e:
             logger.error(f"Error calling Ollama models API: {str(e)}")
             raise Exception(f"Failed to get models from Ollama API: {str(e)}")
+
+    async def create_image_with_comfyui(self, prompt):
+        """Generate image using ComfyUI with CLIP Text Encode"""
+        await self.create_session()
+        
+        # My built ComfyUI workflow for text-to-image generation
+        workflow = {
+            "3": {
+                "inputs": {
+                    "seed": 0,
+                    "steps": 20,
+                    "cfg": 8,
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "denoise": 1,
+                    "model": ["4", 0],
+                    "positive": ["6", 0],
+                    "negative": ["7", 0],
+                    "latent_image": ["5", 0]
+                },
+                "class_type": "KSampler",
+                "_meta": {
+                    "title": "KSampler"
+                }
+            },
+            "4": {
+                "inputs": {
+                    "ckpt_name": "sd_xl_base_1.0.safetensors"
+                },
+                "class_type": "CheckpointLoaderSimple",
+                "_meta": {
+                    "title": "Load Checkpoint"
+                }
+            },
+            "5": {
+                "inputs": {
+                    "width": 1024,
+                    "height": 1024,
+                    "batch_size": 1
+                },
+                "class_type": "EmptyLatentImage",
+                "_meta": {
+                    "title": "Empty Latent Image"
+                }
+            },
+            "6": {
+                "inputs": {
+                    "text": prompt,
+                    "clip": ["4", 1]
+                },
+                "class_type": "CLIPTextEncode",
+                "_meta": {
+                    "title": "CLIP Text Encode (Prompt)"
+                }
+            },
+            "7": {
+                "inputs": {
+                    "text": "",
+                    "clip": ["4", 1]
+                },
+                "class_type": "CLIPTextEncode",
+                "_meta": {
+                    "title": "CLIP Text Encode (Negative)"
+                }
+            },
+            "8": {
+                "inputs": {
+                    "samples": ["3", 0],
+                    "vae": ["4", 2]
+                },
+                "class_type": "VAEDecode",
+                "_meta": {
+                    "title": "VAE Decode"
+                }
+            },
+            "9": {
+                "inputs": {
+                    "filename_prefix": "ComfyUI",
+                    "images": ["8", 0]
+                },
+                "class_type": "SaveImage",
+                "_meta": {
+                    "title": "Save Image"
+                }
+            }
+        }
+        
+        try:
+            # Generate a unique prompt ID
+            prompt_id = str(uuid.uuid4())
+            
+            # Queue the prompt
+            queue_payload = {
+                "prompt": workflow,
+                "client_id": prompt_id
+            }
+            
+            async with self.session.post(f"{COMFYUI_API_URL}/prompt", 
+                                       json=queue_payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"ComfyUI queue error {response.status}: {error_text}")
+                    raise Exception(f"Failed to queue prompt: {response.status}")
+                
+                queue_result = await response.json()
+                prompt_id = queue_result.get("prompt_id")
+                
+            if not prompt_id:
+                raise Exception("No prompt_id returned from ComfyUI")
+            
+            # Poll for completion
+            max_attempts = 60  # 5 minutes max wait
+            for attempt in range(max_attempts):
+                await asyncio.sleep(5)  # Wait 5 seconds between checks
+                
+                async with self.session.get(f"{COMFYUI_API_URL}/history/{prompt_id}") as response:
+                    if response.status == 200:
+                        history = await response.json()
+                        if prompt_id in history:
+                            # Get the output images
+                            outputs = history[prompt_id].get("outputs", {})
+                            if "9" in outputs and "images" in outputs["9"]:
+                                image_info = outputs["9"]["images"][0]
+                                filename = image_info["filename"]
+                                subfolder = image_info.get("subfolder", "")
+                                
+                                # Download the image
+                                view_url = f"{COMFYUI_API_URL}/view"
+                                params = {"filename": filename}
+                                if subfolder:
+                                    params["subfolder"] = subfolder
+                                    
+                                async with self.session.get(view_url, params=params) as img_response:
+                                    if img_response.status == 200:
+                                        image_data = await img_response.read()
+                                        return image_data
+                                    else:
+                                        raise Exception(f"Failed to download image: {img_response.status}")
+                            break
+                    
+            raise Exception("Image generation timed out")
+                    
+        except asyncio.TimeoutError:
+            logger.error("Timeout calling ComfyUI API")
+            raise Exception("Request timed out")
+        except Exception as e:
+            logger.error(f"Error calling ComfyUI API: {str(e)}")
+            raise Exception(f"Failed to generate image: {str(e)}")
 
 # Create bot instance
 myai = MyAIBot()
@@ -324,6 +475,56 @@ async def on_message(message):
                 
                 await message.reply(embed=error_embed)
 
+    # Create image command using ComfyUI
+    elif content.startswith('!create '):
+        prompt = message.content.strip()[8:].strip()  # Remove "!create " prefix
+        
+        if not prompt:
+            await message.reply('❌ Please provide a description for the image. Example: `!create a beautiful sunset over mountains`')
+            return
+
+        async with message.channel.typing():
+            try:
+                logger.info(f'🎨 Processing image generation from {message.author.name}: "{prompt}"')
+                
+                # Generate image with ComfyUI
+                image_data = await myai.create_image_with_comfyui(prompt)
+                
+                # Create a file-like object from the image data
+                image_file = discord.File(io.BytesIO(image_data), filename="generated_image.png")
+                
+                # Create embed with image
+                embed = discord.Embed(
+                    title="🎨 Generated Image",
+                    description=f"**Prompt:** {prompt}",
+                    color=0xFF6B9D,
+                    timestamp=message.created_at
+                )
+                embed.set_image(url="attachment://generated_image.png")
+                embed.set_footer(
+                    text=f"Created by {message.author.display_name}",
+                    icon_url=message.author.display_avatar.url
+                )
+                
+                await message.reply(embed=embed, file=image_file)
+                
+            except Exception as e:
+                logger.error(f'Error generating image: {str(e)}')
+                
+                error_embed = discord.Embed(
+                    title="❌ Image Generation Error",
+                    description="Sorry, I couldn't generate the image. Please try again later.",
+                    color=0xFF0000,
+                    timestamp=message.created_at
+                )
+                error_embed.add_field(
+                    name="Possible Issues",
+                    value="• ComfyUI server might be down\n• Network connectivity issues\n• Model not loaded in ComfyUI\n• Queue might be full",
+                    inline=False
+                )
+                
+                await message.reply(embed=error_embed)
+
     # Help command
     elif content in ['!help', '!myai help']:
         help_embed = discord.Embed(
@@ -335,6 +536,11 @@ async def on_message(message):
         help_embed.add_field(
             name="💬 Ask Questions",
             value="`!ask me <your question>` or `!askme <your question>`\nAsk me anything and I'll use " + current_model + " to help you!",
+            inline=False
+        )
+        help_embed.add_field(
+            name="🎨 Generate Images",
+            value="`!create <description>`\nGenerate images using ComfyUI (e.g., `!create a cat in space`)",
             inline=False
         )
         help_embed.add_field(
