@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import logging
 import uuid
 import io
+import base64
 
 # Load environment variables
 load_dotenv()
@@ -251,6 +252,58 @@ class MyAIBot:
         except Exception as e:
             logger.error(f"Error calling ComfyUI API: {str(e)}")
             raise Exception(f"Failed to generate image: {str(e)}")
+
+    async def analyze_image_with_ollama(self, prompt, image_data):
+        """Analyze image using Ollama with vision model"""
+        await self.create_session()
+        
+        # Convert image data to base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        payload = {
+            "model": current_model,
+            "prompt": prompt,
+            "images": [image_base64],
+            "stream": False,
+            "options": {
+                "temperature": 0.7,
+                "num_predict": 500
+            }
+        }
+
+        try:
+            async with self.session.post(f"{OLLAMA_API_URL}/api/generate", 
+                                       json=payload,
+                                       headers={'Content-Type': 'application/json'}) as response:
+                
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get('response', 'No response received')
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Ollama vision API error {response.status}: {error_text}")
+                    raise Exception(f"API returned status {response.status}")
+                    
+        except asyncio.TimeoutError:
+            logger.error("Timeout calling Ollama vision API")
+            raise Exception("Request timed out")
+        except Exception as e:
+            logger.error(f"Error calling Ollama vision API: {str(e)}")
+            raise Exception(f"Failed to get response from Ollama vision API: {str(e)}")
+
+    async def download_discord_image(self, attachment):
+        """Download image from Discord attachment"""
+        await self.create_session()
+        
+        try:
+            async with self.session.get(attachment.url) as response:
+                if response.status == 200:
+                    return await response.read()
+                else:
+                    raise Exception(f"Failed to download image: {response.status}")
+        except Exception as e:
+            logger.error(f"Error downloading image: {str(e)}")
+            raise Exception(f"Failed to download image: {str(e)}")
 
 # Create bot instance
 myai = MyAIBot()
@@ -525,6 +578,93 @@ async def on_message(message):
                 
                 await message.reply(embed=error_embed)
 
+    # Image analysis command using Ollama vision models
+    elif content.startswith('!image '):
+        # Check if message has image attachments
+        if not message.attachments:
+            await message.reply('❌ Please attach an image to analyze. Example: Upload an image and type `!image describe this photo`')
+            return
+        
+        # Get the first image attachment
+        attachment = message.attachments[0]
+        
+        # Check if it's an image
+        if not attachment.content_type or not attachment.content_type.startswith('image/'):
+            await message.reply('❌ Please attach a valid image file (PNG, JPG, GIF, etc.)')
+            return
+        
+        # Check file size (Discord max is 8MB, but let's limit to 5MB for processing)
+        if attachment.size > 5 * 1024 * 1024:  # 5MB
+            await message.reply('❌ Image file is too large. Please use an image smaller than 5MB.')
+            return
+        
+        prompt = message.content.strip()[7:].strip()  # Remove "!image " prefix
+        
+        if not prompt:
+            prompt = "Describe this image in detail."
+        
+        async with message.channel.typing():
+            try:
+                logger.info(f'🖼️ Processing image analysis from {message.author.name}: "{prompt}"')
+                
+                # Download the image
+                image_data = await myai.download_discord_image(attachment)
+                
+                # Analyze image with Ollama
+                response = await myai.analyze_image_with_ollama(prompt, image_data)
+                
+                # Create embed for better formatting
+                embed = discord.Embed(
+                    title="🖼️ Image Analysis",
+                    description=response,
+                    color=0x9B59B6,
+                    timestamp=message.created_at
+                )
+                embed.add_field(
+                    name="📝 Query",
+                    value=prompt,
+                    inline=False
+                )
+                embed.add_field(
+                    name="🤖 Model",
+                    value=current_model,
+                    inline=True
+                )
+                embed.set_footer(
+                    text=f"Analyzed by {message.author.display_name}",
+                    icon_url=message.author.display_avatar.url
+                )
+                
+                # Set the analyzed image as thumbnail
+                embed.set_thumbnail(url=attachment.url)
+
+                # Handle long responses
+                if len(response) > 4096:
+                    # Split into chunks if too long for embed
+                    chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
+                    await message.reply(f"🖼️ **Image Analysis:**\n**Query:** {prompt}\n**Model:** {current_model}\n\n{chunks[0]}")
+                    for chunk in chunks[1:]:
+                        await message.channel.send(chunk)
+                else:
+                    await message.reply(embed=embed)
+
+            except Exception as e:
+                logger.error(f'Error analyzing image: {str(e)}')
+                
+                error_embed = discord.Embed(
+                    title="❌ Image Analysis Error",
+                    description="Sorry, I couldn't analyze the image. Please try again later.",
+                    color=0xFF0000,
+                    timestamp=message.created_at
+                )
+                error_embed.add_field(
+                    name="Possible Issues",
+                    value="• Model doesn't support vision (try a vision model like llava)\n• Image format not supported\n• Ollama server issues\n• Network connectivity problems",
+                    inline=False
+                )
+                
+                await message.reply(embed=error_embed)
+
     # Help command
     elif content in ['!help', '!myai help']:
         help_embed = discord.Embed(
@@ -541,6 +681,11 @@ async def on_message(message):
         help_embed.add_field(
             name="🎨 Generate Images",
             value="`!create <description>`\nGenerate images using ComfyUI (e.g., `!create a cat in space`)",
+            inline=False
+        )
+        help_embed.add_field(
+            name="🖼️ Analyze Images",
+            value="`!image <question>`\nAnalyze uploaded images (attach image + `!image what's in this photo?`)",
             inline=False
         )
         help_embed.add_field(
