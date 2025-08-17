@@ -57,7 +57,7 @@ class MyAIBot:
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.7,
+                "temperature": 0.2,
                 "num_predict": 500
             }
         }
@@ -109,11 +109,11 @@ class MyAIBot:
         """Generate image using ComfyUI with CLIP Text Encode"""
         await self.create_session()
         
-        # My built ComfyUI workflow for text-to-image generation
+        # ComfyUI workflow for text-to-image generation from ComfyUIwf.json
         workflow = {
             "3": {
                 "inputs": {
-                    "seed": 0,
+                    "seed": 629982222946916,
                     "steps": 20,
                     "cfg": 8,
                     "sampler_name": "euler",
@@ -131,22 +131,22 @@ class MyAIBot:
             },
             "4": {
                 "inputs": {
-                    "ckpt_name": "sd_xl_base_1.0.safetensors"
+                    "ckpt_name": "v1-5-pruned-emaonly-fp16.safetensors"
                 },
                 "class_type": "CheckpointLoaderSimple",
                 "_meta": {
-                    "title": "Load Checkpoint"
+                    "title": "CheckpointLoaderSimple"
                 }
             },
             "5": {
                 "inputs": {
-                    "width": 1024,
-                    "height": 1024,
+                    "width": 512,
+                    "height": 512,
                     "batch_size": 1
                 },
                 "class_type": "EmptyLatentImage",
                 "_meta": {
-                    "title": "Empty Latent Image"
+                    "title": "EmptyLatentImage"
                 }
             },
             "6": {
@@ -156,7 +156,7 @@ class MyAIBot:
                 },
                 "class_type": "CLIPTextEncode",
                 "_meta": {
-                    "title": "CLIP Text Encode (Prompt)"
+                    "title": "CLIPTextEncode"
                 }
             },
             "7": {
@@ -166,7 +166,7 @@ class MyAIBot:
                 },
                 "class_type": "CLIPTextEncode",
                 "_meta": {
-                    "title": "CLIP Text Encode (Negative)"
+                    "title": "CLIPTextEncode"
                 }
             },
             "8": {
@@ -176,7 +176,7 @@ class MyAIBot:
                 },
                 "class_type": "VAEDecode",
                 "_meta": {
-                    "title": "VAE Decode"
+                    "title": "VAEDecode"
                 }
             },
             "9": {
@@ -186,7 +186,7 @@ class MyAIBot:
                 },
                 "class_type": "SaveImage",
                 "_meta": {
-                    "title": "Save Image"
+                    "title": "SaveImage"
                 }
             }
         }
@@ -266,7 +266,7 @@ class MyAIBot:
             "images": [image_base64],
             "stream": False,
             "options": {
-                "temperature": 0.7,
+                "temperature": 0.2,
                 "num_predict": 500
             }
         }
@@ -469,7 +469,7 @@ async def on_message(message):
                 
                 # Format models list
                 model_list = []
-                for i, model in enumerate(models[:10]):  # Limit to 10 models to avoid embed limits
+                for i, model in enumerate(models):  # Show all models
                     name = model.get('name', 'Unknown')
                     size = model.get('size', 0)
                     
@@ -493,13 +493,6 @@ async def on_message(message):
                     value="\n".join(model_list),
                     inline=False
                 )
-                
-                if len(models) > 10:
-                    models_embed.add_field(
-                        name="ℹ️ Note",
-                        value=f"Showing first 10 of {len(models)} models",
-                        inline=False
-                    )
                 
                 models_embed.add_field(
                     name="🔧 Usage",
