@@ -253,6 +253,236 @@ class MyAIBot:
             logger.error(f"Error calling ComfyUI API: {str(e)}")
             raise Exception(f"Failed to generate image: {str(e)}")
 
+    async def create_video_with_comfyui(self, prompt):
+        """Generate video using ComfyUI with video workflow"""
+        await self.create_session()
+        
+        # Embedded video workflow
+        workflow = {
+            "3": {
+                "inputs": {
+                    "seed": 181197454961476,
+                    "steps": 30,
+                    "cfg": 6,
+                    "sampler_name": "uni_pc",
+                    "scheduler": "simple",
+                    "denoise": 1,
+                    "model": ["48", 0],
+                    "positive": ["6", 0],
+                    "negative": ["7", 0],
+                    "latent_image": ["40", 0]
+                },
+                "class_type": "KSampler",
+                "_meta": {"title": "KSampler"}
+            },
+            "6": {
+                "inputs": {
+                    "text": prompt,
+                    "clip": ["38", 0]
+                },
+                "class_type": "CLIPTextEncode",
+                "_meta": {"title": "CLIP Text Encode (Positive Prompt)"}
+            },
+            "7": {
+                "inputs": {
+                    "text": "Vibrant colors, overexposure, static, blurred details, subtitles, style, artwork, painting, still image, overall grayness, worst quality, low quality, JPEG compression residue, ugly, mutilated, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, malformed limbs, fused fingers, still image, cluttered background, three legs, crowded background, walking backwards",
+                    "clip": ["38", 0]
+                },
+                "class_type": "CLIPTextEncode",
+                "_meta": {"title": "CLIP Text Encode (Negative Prompt)"}
+            },
+            "8": {
+                "inputs": {
+                    "samples": ["3", 0],
+                    "vae": ["39", 0]
+                },
+                "class_type": "VAEDecode",
+                "_meta": {"title": "VAE Decode"}
+            },
+            "37": {
+                "inputs": {
+                    "unet_name": "wan2.1_t2v_1.3B_fp16.safetensors",
+                    "weight_dtype": "default"
+                },
+                "class_type": "UNETLoader",
+                "_meta": {"title": "Load Diffusion Model"}
+            },
+            "38": {
+                "inputs": {
+                    "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+                    "type": "wan",
+                    "device": "default"
+                },
+                "class_type": "CLIPLoader",
+                "_meta": {"title": "Load CLIP"}
+            },
+            "39": {
+                "inputs": {
+                    "vae_name": "wan_2.1_vae.safetensors"
+                },
+                "class_type": "VAELoader",
+                "_meta": {"title": "Load VAE"}
+            },
+            "40": {
+                "inputs": {
+                    "width": 512,
+                    "height": 512,
+                    "length": 33,
+                    "batch_size": 1
+                },
+                "class_type": "EmptyHunyuanLatentVideo",
+                "_meta": {"title": "EmptyHunyuanLatentVideo"}
+            },
+            "48": {
+                "inputs": {
+                    "shift": 8,
+                    "model": ["37", 0]
+                },
+                "class_type": "ModelSamplingSD3",
+                "_meta": {"title": "ModelSamplingSD3"}
+            },
+            "49": {
+                "inputs": {
+                    "fps": 16,
+                    "images": ["8", 0]
+                },
+                "class_type": "CreateVideo",
+                "_meta": {"title": "Create Video"}
+            },
+            "50": {
+                "inputs": {
+                    "filename_prefix": "ComfyUI",
+                    "format": "mp4",
+                    "codec": "h264",
+                    "video-preview": "",
+                    "video": ["49", 0]
+                },
+                "class_type": "SaveVideo",
+                "_meta": {"title": "Save Video"}
+            }
+        }
+        
+        try:
+            # Generate a unique prompt ID
+            prompt_id = str(uuid.uuid4())
+            
+            # Queue the prompt
+            queue_payload = {
+                "prompt": workflow,
+                "client_id": prompt_id
+            }
+            
+            async with self.session.post(f"{COMFYUI_API_URL}/prompt", 
+                                       json=queue_payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"ComfyUI video queue error {response.status}: {error_text}")
+                    raise Exception(f"Failed to queue video prompt: {response.status}")
+                
+                queue_result = await response.json()
+                prompt_id = queue_result.get("prompt_id")
+                
+            if not prompt_id:
+                raise Exception("No prompt_id returned from ComfyUI")
+            
+            # Poll for completion (videos take longer than images)
+            max_attempts = 120  # 10 minutes max wait
+            for attempt in range(max_attempts):
+                await asyncio.sleep(5)  # Wait 5 seconds between checks
+                
+                async with self.session.get(f"{COMFYUI_API_URL}/history/{prompt_id}") as response:
+                    if response.status == 200:
+                        history = await response.json()
+                        if prompt_id in history:
+                            # Get the output video
+                            outputs = history[prompt_id].get("outputs", {})
+                            logger.info(f"ComfyUI outputs: {list(outputs.keys())}")
+                            
+                            if "50" in outputs:
+                                save_video_output = outputs["50"]
+                                logger.info(f"SaveVideo output: {save_video_output}")
+                                
+                                # Try different possible keys for video output
+                                video_info = None
+                                filename = None
+                                subfolder = ""
+                                
+                                # Check for various possible output structures
+                                if "videos" in save_video_output and save_video_output["videos"]:
+                                    video_info = save_video_output["videos"][0]
+                                    filename = video_info.get("filename")
+                                    subfolder = video_info.get("subfolder", "")
+                                elif "gifs" in save_video_output and save_video_output["gifs"]:
+                                    video_info = save_video_output["gifs"][0]
+                                    filename = video_info.get("filename")
+                                    subfolder = video_info.get("subfolder", "")
+                                elif isinstance(save_video_output, dict):
+                                    # Check if the output directly contains filename info
+                                    for key, value in save_video_output.items():
+                                        if isinstance(value, list) and value:
+                                            if isinstance(value[0], dict) and "filename" in value[0]:
+                                                video_info = value[0]
+                                                filename = video_info.get("filename")
+                                                subfolder = video_info.get("subfolder", "")
+                                                logger.info(f"Found video in key '{key}': {filename}")
+                                                break
+                                
+                                if filename:
+                                    logger.info(f"Video file: {filename}, subfolder: {subfolder}")
+                                    
+                                    # Download the video
+                                    view_url = f"{COMFYUI_API_URL}/view"
+                                    params = {"filename": filename}
+                                    if subfolder:
+                                        params["subfolder"] = subfolder
+                                        
+                                    logger.info(f"Downloading from: {view_url} with params: {params}")
+                                    
+                                    async with self.session.get(view_url, params=params) as vid_response:
+                                        if vid_response.status == 200:
+                                            video_data = await vid_response.read()
+                                            logger.info(f"Downloaded video: {len(video_data)} bytes")
+                                            return video_data, filename
+                                        else:
+                                            logger.error(f"Video download failed via /view: {vid_response.status}")
+                                            
+                                            # Try alternative download method using direct file path
+                                            try:
+                                                # Try the output directory path
+                                                file_path = f"output/{subfolder}/{filename}" if subfolder else f"output/{filename}"
+                                                alt_url = f"{COMFYUI_API_URL}/view"
+                                                alt_params = {"filename": file_path}
+                                                
+                                                logger.info(f"Trying alternative download: {alt_url} with filename={file_path}")
+                                                
+                                                async with self.session.get(alt_url, params=alt_params) as alt_response:
+                                                    if alt_response.status == 200:
+                                                        video_data = await alt_response.read()
+                                                        logger.info(f"Downloaded video via alternative method: {len(video_data)} bytes")
+                                                        return video_data, filename
+                                            except Exception as alt_e:
+                                                logger.error(f"Alternative download also failed: {alt_e}")
+                                            
+                                            error_text = await vid_response.text()
+                                            logger.error(f"Video download error: {error_text}")
+                                            raise Exception(f"Failed to download video: {vid_response.status}")
+                                else:
+                                    logger.error(f"No video file found in SaveVideo output: {save_video_output}")
+                                    raise Exception("No video file found in ComfyUI output")
+                            else:
+                                logger.error(f"SaveVideo node (50) not found in outputs: {list(outputs.keys())}")
+                                raise Exception("SaveVideo node output not found")
+                            break
+                    
+            raise Exception("Video generation timed out")
+                    
+        except asyncio.TimeoutError:
+            logger.error("Timeout calling ComfyUI video API")
+            raise Exception("Request timed out")
+        except Exception as e:
+            logger.error(f"Error calling ComfyUI video API: {str(e)}")
+            raise Exception(f"Failed to generate video: {str(e)}")
+
     async def analyze_image_with_ollama(self, prompt, image_data):
         """Analyze image using Ollama with vision model"""
         await self.create_session()
@@ -571,6 +801,81 @@ async def on_message(message):
                 
                 await message.reply(embed=error_embed)
 
+    # Create video command using ComfyUI
+    elif content.startswith('!video '):
+        prompt = message.content.strip()[7:].strip()  # Remove "!video " prefix
+        
+        if not prompt:
+            await message.reply('❌ Please provide a description for the video. Example: `!video a fox moving quickly in a beautiful winter scenery`')
+            return
+
+        async with message.channel.typing():
+            try:
+                logger.info(f'🎬 Processing video generation from {message.author.name}: "{prompt}"')
+                
+                # Generate video with ComfyUI
+                video_data, filename = await myai.create_video_with_comfyui(prompt)
+                
+                logger.info(f'Video generated successfully: {len(video_data)} bytes, filename: {filename}')
+                
+                # Check file size (Discord limit is 8MB for regular users, 50MB for Nitro)
+                if len(video_data) > 8 * 1024 * 1024:  # 8MB limit
+                    await message.reply(f'❌ Generated video is too large ({len(video_data)/(1024*1024):.1f}MB). Discord limit is 8MB for regular users.')
+                    return
+                
+                # Create a file-like object from the video data with proper extension
+                video_io = io.BytesIO(video_data)
+                video_io.seek(0)  # Reset pointer to beginning
+                video_file = discord.File(video_io, filename=f"generated_video_{message.id}.mp4")
+                
+                logger.info(f'Created Discord file object with {len(video_data)} bytes, attempting to send...')
+                
+                # Create embed (without trying to reference the video file)
+                embed = discord.Embed(
+                    title="🎬 Generated Video",
+                    description=f"**Prompt:** {prompt}",
+                    color=0xFF9500,
+                    timestamp=message.created_at
+                )
+                embed.add_field(
+                    name="📹 Video Info",
+                    value=f"Resolution: 512x512\nFPS: 16\nLength: ~2 seconds\nSize: {len(video_data)/(1024*1024):.1f}MB",
+                    inline=False
+                )
+                embed.set_footer(
+                    text=f"Created by {message.author.display_name}",
+                    icon_url=message.author.display_avatar.url
+                )
+                
+                # Send the video file as attachment with embed
+                try:
+                    await message.reply(file=video_file, embed=embed)
+                    logger.info('Video sent successfully to Discord')
+                except discord.HTTPException as http_err:
+                    logger.error(f'Discord HTTP error sending video: {http_err}')
+                    # Try sending just the file without embed if embed fails
+                    video_io.seek(0)  # Reset for retry
+                    video_file = discord.File(video_io, filename=f"generated_video_{message.id}.mp4")
+                    await message.reply(f"🎬 **Generated Video** (Prompt: {prompt})", file=video_file)
+                    logger.info('Video sent successfully without embed')
+                
+            except Exception as e:
+                logger.error(f'Error generating video: {str(e)}')
+                
+                error_embed = discord.Embed(
+                    title="❌ Video Generation Error",
+                    description="Sorry, I couldn't generate the video. Please try again later.",
+                    color=0xFF0000,
+                    timestamp=message.created_at
+                )
+                error_embed.add_field(
+                    name="Possible Issues",
+                    value="• ComfyUI server might be down\n• Video models not loaded in ComfyUI\n• Network connectivity issues\n• Queue might be full\n• Video generation timeout",
+                    inline=False
+                )
+                
+                await message.reply(embed=error_embed)
+
     # Image analysis command using Ollama vision models
     elif content.startswith('!image '):
         # Check if message has image attachments
@@ -674,6 +979,11 @@ async def on_message(message):
         help_embed.add_field(
             name="🎨 Generate Images",
             value="`!create <description>`\nGenerate images using ComfyUI (e.g., `!create a cat in space`)",
+            inline=False
+        )
+        help_embed.add_field(
+            name="🎬 Generate Videos",
+            value="`!video <description>`\nGenerate videos using ComfyUI (e.g., `!video a fox running in the forest`)",
             inline=False
         )
         help_embed.add_field(

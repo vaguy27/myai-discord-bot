@@ -1,19 +1,20 @@
 # MyAI.Bot Discord Bot
 
-A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provide text responses, image generation, and image analysis capabilities. Features configurable AI models with admin controls.
+A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provide text responses, image generation, video generation, and image analysis capabilities. Features configurable AI models with admin controls.
 
 ## Features
 
 - 🤖 AI-powered text responses via Ollama with configurable models
 - 🎨 AI image generation using ComfyUI with CLIP Text Encode
+- 🎬 AI video generation using ComfyUI with advanced video workflows
 - 🖼️ AI image analysis using vision models (llava, bakllava, etc.)
 - 🔧 Dynamic model switching (admin-only)
 - 📋 List available Ollama models
 - 🎯 Channel-specific responses (only responds in "myai-bot" channel)
 - 🔒 Admin-only shutdown and model management commands
-- 📱 Beautiful Discord embeds with image support
+- 📱 Beautiful Discord embeds with image and video attachment support
 - ⚡ Async processing with typing indicators
-- 🛡️ Comprehensive error handling
+- 🛡️ Comprehensive error handling with fallback mechanisms
 
 ## Setup
 
@@ -81,8 +82,9 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 - `!ask me <question>` or `!askme <question>` - Ask the AI anything
 - `!help` or `!myai help` - Show help message
 
-### AI Image Features
+### AI Media Features
 - `!create <description>` - Generate images using ComfyUI (e.g., `!create a cat in space`)
+- `!video <description>` - Generate videos using ComfyUI (e.g., `!video a fox running in the forest`)
 - `!image <question>` - Analyze uploaded images (attach image + `!image what's in this photo?`)
 
 ### Model Management (Admin Only)
@@ -107,6 +109,7 @@ When inviting the bot to your server, make sure to grant these permissions:
 - **Bot not responding**: Check if Ollama is running and the "myai-bot" channel exists
 - **API errors**: Verify Ollama is accessible at the configured URL
 - **Image generation not working**: Ensure ComfyUI is running on port 8188 with required models
+- **Video generation not working**: Ensure ComfyUI has video models loaded (wan2.1_t2v, umt5_xxl, wan_2.1_vae)
 - **Image analysis not working**: Use a vision model like `!llm llava`
 - **Permission errors**: Ensure the bot has proper permissions in the channel
 - **Large images failing**: Keep images under 5MB for optimal processing
