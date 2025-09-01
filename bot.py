@@ -19,6 +19,8 @@ OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
 COMFYUI_API_URL = os.getenv('COMFYUI_API_URL', 'http://localhost:8188')
 # Global variable for model name (can be changed with !llm command)
 current_model = 'gemma3:12b'
+# Global variable for music tags (can be changed with !music_tags command)
+current_music_tags = 'anime, soft female vocals, kawaii pop, j-pop, childish, piano, guitar, synthesizer, fast, happy, cheerful, lighthearted'
 TARGET_CHANNEL = 'myai-bot'
 
 # Set up logging
@@ -492,7 +494,7 @@ class MyAIBot:
         workflow = {
             "14": {
                 "inputs": {
-                    "tags": "anime, soft female vocals, kawaii pop, j-pop, childish, piano, guitar, synthesizer, fast, happy, cheerful, lighthearted",
+                    "tags": current_music_tags,
                     "lyrics": prompt,
                     "lyrics_strength": 0.99,
                     "clip": ["40", 1]
@@ -502,7 +504,7 @@ class MyAIBot:
             },
             "17": {
                 "inputs": {
-                    "seconds": 30,
+                    "seconds": 120,
                     "batch_size": 1
                 },
                 "class_type": "EmptyAceStepLatentAudio",
@@ -886,6 +888,47 @@ async def on_message(message):
         await message.reply(embed=model_embed)
         logger.info(f'🔄 Model changed from {old_model} to {new_model} by {message.author.name}')
 
+    # Music tags configuration command (Admin only)
+    elif content.startswith('!music_tags '):
+        global current_music_tags  # Declare global variable at the start
+        
+        # Check if user has administrator permissions
+        if not message.author.guild_permissions.administrator:
+            await message.reply('❌ You need administrator permissions to change music tags.')
+            return
+        
+        new_tags = message.content.strip()[12:].strip()  # Remove "!music_tags " prefix
+        
+        if not new_tags:
+            await message.reply(f'❌ Please specify music tags. Example: `!music_tags electronic, upbeat, synthesizer, dance`\n**Current tags:** {current_music_tags}')
+            return
+        
+        # Update global music tags variable
+        old_tags = current_music_tags
+        current_music_tags = new_tags
+        
+        # Create confirmation embed
+        tags_embed = discord.Embed(
+            title="🎵 Music Tags Changed",
+            description=f"Successfully updated music generation tags",
+            color=0x00FF00,
+            timestamp=message.created_at
+        )
+        tags_embed.add_field(
+            name="Previous Tags",
+            value=f"`{old_tags[:100]}{'...' if len(old_tags) > 100 else ''}`",
+            inline=False
+        )
+        tags_embed.add_field(
+            name="New Tags",
+            value=f"`{new_tags[:100]}{'...' if len(new_tags) > 100 else ''}`",
+            inline=False
+        )
+        tags_embed.set_footer(text=f"Changed by {message.author.display_name}")
+        
+        await message.reply(embed=tags_embed)
+        logger.info(f'🎵 Music tags changed by {message.author.name}')
+
     # List available models command
     elif content in ['!models', '!model list', '!list models']:
         async with message.channel.typing():
@@ -1122,7 +1165,7 @@ async def on_message(message):
                 await message.reply(
                     f"🎵 **Generated Music**\n"
                     f"**Prompt:** {prompt}\n"
-                    f"**Duration:** 30 seconds | **Size:** {len(audio_data)/(1024*1024):.1f}MB", 
+                    f"**Duration:** 120 seconds | **Size:** {len(audio_data)/(1024*1024):.1f}MB", 
                     file=audio_file
                 )
                 logger.info('Music file sent successfully to Discord')
@@ -1272,6 +1315,11 @@ async def on_message(message):
         help_embed.add_field(
             name="🤖 Change Model (Admin Only)",
             value=f"`!llm <model_name>`\nChange the AI model (currently: {current_model})",
+            inline=False
+        )
+        help_embed.add_field(
+            name="🎵 Configure Music Tags (Admin Only)",
+            value=f"`!music_tags <tags>`\nConfigure music generation style tags",
             inline=False
         )
         help_embed.add_field(
