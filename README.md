@@ -21,7 +21,7 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 ### Prerequisites
 - Python 3.8 or higher
 - Ollama installed and running
-- ComfyUI installed and running (for image generation)
+- ComfyUI installed and running (for image, video, and music generation)
 - Discord bot token
 
 ### Installation
@@ -41,11 +41,14 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
    ollama serve
    ```
 
-3. **Set up ComfyUI (optional, for image generation):**
+3. **Set up ComfyUI (optional, for image, video, and music generation):**
    ```bash
    # Install ComfyUI and start the server
    # Make sure it's running on http://localhost:8188
-   # Ensure you have sd_xl_base_1.0.safetensors model loaded
+   # Ensure you have required models loaded:
+   # - sd_xl_base_1.0.safetensors (for images)
+   # - wan2.1_t2v_1.3B_fp16.safetensors, umt5_xxl_fp8_e4m3fn_scaled.safetensors, wan_2.1_vae.safetensors (for videos)
+   # - ace_step_v1_3.5b.safetensors (for music)
    ```
 
 4. **Configure Discord Bot:**
@@ -85,6 +88,7 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 ### AI Media Features
 - `!create <description>` - Generate images using ComfyUI (e.g., `!create a cat in space`)
 - `!video <description>` - Generate videos using ComfyUI (e.g., `!video a fox running in the forest`)
+- `!music <description>` - Generate music using ComfyUI (e.g., `!music upbeat electronic dance music`)
 - `!image <question>` - Analyze uploaded images (attach image + `!image what's in this photo?`)
 
 ### Model Management (Admin Only)
@@ -110,9 +114,10 @@ When inviting the bot to your server, make sure to grant these permissions:
 - **API errors**: Verify Ollama is accessible at the configured URL
 - **Image generation not working**: Ensure ComfyUI is running on port 8188 with required models
 - **Video generation not working**: Ensure ComfyUI has video models loaded (wan2.1_t2v, umt5_xxl, wan_2.1_vae)
+- **Music generation not working**: Ensure ComfyUI has audio models loaded (ace_step_v1_3.5b.safetensors)
 - **Image analysis not working**: Use a vision model like `!llm llava`
 - **Permission errors**: Ensure the bot has proper permissions in the channel
-- **Large images failing**: Keep images under 5MB for optimal processing
+- **Large files failing**: Keep images under 5MB and audio/video under 8MB for optimal processing
 
 ## License
 
