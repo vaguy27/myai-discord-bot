@@ -1,18 +1,19 @@
 # MyAI.Bot Discord Bot
 
-A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provide text responses, image generation, video generation, and image analysis capabilities. Features configurable AI models with admin controls.
+A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provide text responses, image generation, video generation, music generation, and image analysis capabilities. Features configurable AI models with admin controls.
 
 ## Features
 
 - 🤖 AI-powered text responses via Ollama with configurable models
 - 🎨 AI image generation using ComfyUI with CLIP Text Encode
 - 🎬 AI video generation using ComfyUI with advanced video workflows
+- 🎵 AI music generation using ComfyUI with ACE Step audio models
 - 🖼️ AI image analysis using vision models (llava, bakllava, etc.)
 - 🔧 Dynamic model switching (admin-only)
 - 📋 List available Ollama models
 - 🎯 Channel-specific responses (only responds in "myai-bot" channel)
 - 🔒 Admin-only shutdown and model management commands
-- 📱 Beautiful Discord embeds with image and video attachment support
+- 📱 Beautiful Discord embeds with image, video, and audio attachment support
 - ⚡ Async processing with typing indicators
 - 🛡️ Comprehensive error handling with fallback mechanisms
 
