@@ -126,6 +126,14 @@ When inviting the bot to your server, make sure to grant these permissions:
 - **Permission errors**: Ensure the bot has proper permissions in the channel
 - **Large files failing**: Keep images under 5MB and audio/video under 8MB for optimal processing
 
+## Test the Bot
+
+Want to see the bot in action? Join our test Discord server and try out all the features:
+
+🔗 **[Join Test Server](https://discord.gg/fUCSeA3h)**
+
+Experience image generation, video creation, music production, and AI conversations firsthand!
+
 ## License
 
 MIT License - feel free to modify and distribute!
