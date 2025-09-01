@@ -94,11 +94,11 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 - `!music <description>` - Generate music using ComfyUI (e.g., `!music upbeat electronic dance music`)
 - `!image <question>` - Analyze uploaded images (attach image + `!image what's in this photo?`)
 
-### Model Management (Admin Only)
+### Model Management
 - `!models` or `!model list` - List all available Ollama models
 - `!llm <model_name>` - Change the AI model (e.g., `!llm llava` for image analysis)
 
-### Music Configuration (Admin Only)
+### Music Configuration  
 - `!music_tags <tags>` - Configure music generation style tags (e.g., `!music_tags electronic, upbeat, dance`)
 
 ### Admin Commands

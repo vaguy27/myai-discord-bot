@@ -857,14 +857,9 @@ async def on_message(message):
         await myai.close_session()
         await bot.close()
 
-    # LLM model configuration command (Admin only)
+    # LLM model configuration command
     elif content.startswith('!llm '):
         global current_model  # Declare global variable at the start
-        
-        # Check if user has administrator permissions
-        if not message.author.guild_permissions.administrator:
-            await message.reply('❌ You need administrator permissions to change the model.')
-            return
         
         new_model = message.content.strip()[5:].strip()  # Remove "!llm " prefix
         
@@ -888,14 +883,9 @@ async def on_message(message):
         await message.reply(embed=model_embed)
         logger.info(f'🔄 Model changed from {old_model} to {new_model} by {message.author.name}')
 
-    # Music tags configuration command (Admin only)
+    # Music tags configuration command
     elif content.startswith('!music_tags '):
         global current_music_tags  # Declare global variable at the start
-        
-        # Check if user has administrator permissions
-        if not message.author.guild_permissions.administrator:
-            await message.reply('❌ You need administrator permissions to change music tags.')
-            return
         
         new_tags = message.content.strip()[12:].strip()  # Remove "!music_tags " prefix
         
@@ -1313,12 +1303,12 @@ async def on_message(message):
             inline=False
         )
         help_embed.add_field(
-            name="🤖 Change Model (Admin Only)",
+            name="🤖 Change Model",
             value=f"`!llm <model_name>`\nChange the AI model (currently: {current_model})",
             inline=False
         )
         help_embed.add_field(
-            name="🎵 Configure Music Tags (Admin Only)",
+            name="🎵 Configure Music Tags",
             value=f"`!music_tags <tags>`\nConfigure music generation style tags",
             inline=False
         )
