@@ -11,7 +11,7 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 - 🖼️ AI image analysis using vision models (llava, bakllava, etc.)
 - 🔧 Dynamic model switching (admin-only)
 - 📋 List available Ollama models
-- 🎯 Channel-specific responses (only responds in "myai-bot" channel)
+- 🎯 Channel-specific responses (responds in "myai-bot" channel and direct messages)
 - 🔒 Admin-only shutdown and model management commands
 - 📱 Beautiful Discord embeds with image, video, and audio attachment support
 - ⚡ Async processing with typing indicators
@@ -73,7 +73,7 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
    ```
 
 6. **Create "myai-bot" channel:**
-   Create a channel named "myai-bot" in your Discord server
+   Create a channel named "myai-bot" in your Discord server (bot also responds to direct messages)
 
 7. **Run the bot:**
    ```bash
@@ -81,6 +81,8 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
    ```
 
 ## Commands
+
+**Note:** All commands work in both the "myai-bot" channel and direct messages for private requests.
 
 ### General Commands
 - `!ask me <question>` or `!askme <question>` - Ask the AI anything

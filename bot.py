@@ -757,10 +757,10 @@ myai = MyAIBot()
 async def on_ready():
     """Event triggered when bot is ready"""
     print(f'✅ {bot.user.name} is online and ready!')
-    print(f'🎯 Looking for channel: {TARGET_CHANNEL}')
+    print(f'🎯 Responding in channel: {TARGET_CHANNEL} and direct messages')
     
     # Set bot status
-    activity = discord.Activity(type=discord.ActivityType.watching, name="for questions...")
+    activity = discord.Activity(type=discord.ActivityType.watching, name="for questions and DMs...")
     await bot.change_presence(activity=activity)
 
 @bot.event
@@ -770,8 +770,8 @@ async def on_message(message):
     if message.author.bot:
         return
     
-    # Only respond in the target channel
-    if message.channel.name != TARGET_CHANNEL:
+    # Only respond in the target channel or direct messages
+    if not isinstance(message.channel, discord.DMChannel) and message.channel.name != TARGET_CHANNEL:
         return
 
     content = message.content.strip().lower()
