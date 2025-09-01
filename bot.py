@@ -325,8 +325,8 @@ class MyAIBot:
             },
             "40": {
                 "inputs": {
-                    "width": 512,
-                    "height": 512,
+                    "width": 832,
+                    "height": 480,
                     "length": 33,
                     "batch_size": 1
                 },
@@ -343,7 +343,8 @@ class MyAIBot:
             },
             "49": {
                 "inputs": {
-                    "fps": 16,
+                    "fps": 8,
+                    #"fps": 16,
                     "images": ["8", 0]
                 },
                 "class_type": "CreateVideo",
@@ -482,6 +483,220 @@ class MyAIBot:
         except Exception as e:
             logger.error(f"Error calling ComfyUI video API: {str(e)}")
             raise Exception(f"Failed to generate video: {str(e)}")
+
+    async def create_music_with_comfyui(self, prompt):
+        """Generate music/song using ComfyUI with audio workflow"""
+        await self.create_session()
+        
+        # Embedded audio workflow for ACE Step v1.3.5b model
+        workflow = {
+            "14": {
+                "inputs": {
+                    "tags": "anime, soft female vocals, kawaii pop, j-pop, childish, piano, guitar, synthesizer, fast, happy, cheerful, lighthearted",
+                    "lyrics": prompt,
+                    "lyrics_strength": 0.99,
+                    "clip": ["40", 1]
+                },
+                "class_type": "TextEncodeAceStepAudio",
+                "_meta": {"title": "TextEncodeAceStepAudio"}
+            },
+            "17": {
+                "inputs": {
+                    "seconds": 30,
+                    "batch_size": 1
+                },
+                "class_type": "EmptyAceStepLatentAudio",
+                "_meta": {"title": "EmptyAceStepLatentAudio"}
+            },
+            "18": {
+                "inputs": {
+                    "samples": ["52", 0],
+                    "vae": ["40", 2]
+                },
+                "class_type": "VAEDecodeAudio",
+                "_meta": {"title": "VAEDecodeAudio"}
+            },
+            "40": {
+                "inputs": {
+                    "ckpt_name": "ace_step_v1_3.5b.safetensors"
+                },
+                "class_type": "CheckpointLoaderSimple",
+                "_meta": {"title": "Load Checkpoint"}
+            },
+            "44": {
+                "inputs": {
+                    "conditioning": ["14", 0]
+                },
+                "class_type": "ConditioningZeroOut",
+                "_meta": {"title": "ConditioningZeroOut"}
+            },
+            "49": {
+                "inputs": {
+                    "model": ["51", 0],
+                    "operation": ["50", 0]
+                },
+                "class_type": "LatentApplyOperationCFG",
+                "_meta": {"title": "LatentApplyOperationCFG"}
+            },
+            "50": {
+                "inputs": {
+                    "multiplier": 1.0
+                },
+                "class_type": "LatentOperationTonemapReinhard",
+                "_meta": {"title": "LatentOperationTonemapReinhard"}
+            },
+            "51": {
+                "inputs": {
+                    "shift": 5.0,
+                    "model": ["40", 0]
+                },
+                "class_type": "ModelSamplingSD3",
+                "_meta": {"title": "ModelSamplingSD3"}
+            },
+            "52": {
+                "inputs": {
+                    "seed": 962231370012320,
+                    "steps": 50,
+                    "cfg": 5,
+                    "sampler_name": "euler",
+                    "scheduler": "simple",
+                    "denoise": 1,
+                    "model": ["49", 0],
+                    "positive": ["14", 0],
+                    "negative": ["44", 0],
+                    "latent_image": ["17", 0]
+                },
+                "class_type": "KSampler",
+                "_meta": {"title": "KSampler"}
+            },
+            "59": {
+                "inputs": {
+                    "filename_prefix": "ComfyUI",
+                    "quality": "V0",
+                    "audioUI": "",
+                    "audio": ["18", 0]
+                },
+                "class_type": "SaveAudioMP3",
+                "_meta": {"title": "Save Audio (MP3)"}
+            }
+        }
+        
+        try:
+            # Generate a unique prompt ID
+            prompt_id = str(uuid.uuid4())
+            
+            # Queue the prompt
+            queue_payload = {
+                "prompt": workflow,
+                "client_id": prompt_id
+            }
+            
+            async with self.session.post(f"{COMFYUI_API_URL}/prompt", 
+                                       json=queue_payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"ComfyUI audio queue error {response.status}: {error_text}")
+                    raise Exception(f"Failed to queue audio prompt: {response.status}")
+                
+                queue_result = await response.json()
+                prompt_id = queue_result.get("prompt_id")
+                
+            if not prompt_id:
+                raise Exception("No prompt_id returned from ComfyUI")
+            
+            # Poll for completion (audio generation can take a while)
+            max_attempts = 120  # 10 minutes max wait
+            for attempt in range(max_attempts):
+                await asyncio.sleep(5)  # Wait 5 seconds between checks
+                
+                async with self.session.get(f"{COMFYUI_API_URL}/history/{prompt_id}") as response:
+                    if response.status == 200:
+                        history = await response.json()
+                        if prompt_id in history:
+                            # Get the output audio
+                            outputs = history[prompt_id].get("outputs", {})
+                            logger.info(f"ComfyUI audio outputs: {list(outputs.keys())}")
+                            
+                            if "59" in outputs:
+                                save_audio_output = outputs["59"]
+                                logger.info(f"SaveAudio output: {save_audio_output}")
+                                
+                                # Try different possible keys for audio output
+                                audio_info = None
+                                filename = None
+                                subfolder = ""
+                                
+                                # Check for various possible output structures
+                                if "audio" in save_audio_output and save_audio_output["audio"]:
+                                    audio_info = save_audio_output["audio"][0]
+                                    filename = audio_info.get("filename")
+                                    subfolder = audio_info.get("subfolder", "")
+                                elif isinstance(save_audio_output, dict):
+                                    # Check if the output directly contains filename info
+                                    for key, value in save_audio_output.items():
+                                        if isinstance(value, list) and value:
+                                            if isinstance(value[0], dict) and "filename" in value[0]:
+                                                audio_info = value[0]
+                                                filename = audio_info.get("filename")
+                                                subfolder = audio_info.get("subfolder", "")
+                                                logger.info(f"Found audio in key '{key}': {filename}")
+                                                break
+                                
+                                if filename:
+                                    logger.info(f"Audio file: {filename}, subfolder: {subfolder}")
+                                    
+                                    # Download the audio
+                                    view_url = f"{COMFYUI_API_URL}/view"
+                                    params = {"filename": filename}
+                                    if subfolder:
+                                        params["subfolder"] = subfolder
+                                        
+                                    logger.info(f"Downloading audio from: {view_url} with params: {params}")
+                                    
+                                    async with self.session.get(view_url, params=params) as audio_response:
+                                        if audio_response.status == 200:
+                                            audio_data = await audio_response.read()
+                                            logger.info(f"Downloaded audio: {len(audio_data)} bytes")
+                                            return audio_data, filename
+                                        else:
+                                            logger.error(f"Audio download failed via /view: {audio_response.status}")
+                                            
+                                            # Try alternative download method using direct file path
+                                            try:
+                                                # Try the output directory path
+                                                file_path = f"output/{subfolder}/{filename}" if subfolder else f"output/{filename}"
+                                                alt_url = f"{COMFYUI_API_URL}/view"
+                                                alt_params = {"filename": file_path}
+                                                
+                                                logger.info(f"Trying alternative audio download: {alt_url} with filename={file_path}")
+                                                
+                                                async with self.session.get(alt_url, params=alt_params) as alt_response:
+                                                    if alt_response.status == 200:
+                                                        audio_data = await alt_response.read()
+                                                        logger.info(f"Downloaded audio via alternative method: {len(audio_data)} bytes")
+                                                        return audio_data, filename
+                                            except Exception as alt_e:
+                                                logger.error(f"Alternative audio download also failed: {alt_e}")
+                                            
+                                            error_text = await audio_response.text()
+                                            logger.error(f"Audio download error: {error_text}")
+                                            raise Exception(f"Failed to download audio: {audio_response.status}")
+                                else:
+                                    logger.error(f"No audio file found in SaveAudio output: {save_audio_output}")
+                                    raise Exception("No audio file found in ComfyUI output")
+                            else:
+                                logger.error(f"SaveAudio node (59) not found in outputs: {list(outputs.keys())}")
+                                raise Exception("SaveAudio node output not found")
+                            break
+                    
+            raise Exception("Audio generation timed out")
+                    
+        except asyncio.TimeoutError:
+            logger.error("Timeout calling ComfyUI audio API")
+            raise Exception("Request timed out")
+        except Exception as e:
+            logger.error(f"Error calling ComfyUI audio API: {str(e)}")
+            raise Exception(f"Failed to generate audio: {str(e)}")
 
     async def analyze_image_with_ollama(self, prompt, image_data):
         """Analyze image using Ollama with vision model"""
@@ -839,7 +1054,7 @@ async def on_message(message):
                 )
                 embed.add_field(
                     name="📹 Video Info",
-                    value=f"Resolution: 512x512\nFPS: 16\nLength: ~2 seconds\nSize: {len(video_data)/(1024*1024):.1f}MB",
+                    value=f"Resolution: 832x480\nFPS: 16\nLength: ~2 seconds\nSize: {len(video_data)/(1024*1024):.1f}MB",
                     inline=False
                 )
                 embed.set_footer(
@@ -871,6 +1086,59 @@ async def on_message(message):
                 error_embed.add_field(
                     name="Possible Issues",
                     value="• ComfyUI server might be down\n• Video models not loaded in ComfyUI\n• Network connectivity issues\n• Queue might be full\n• Video generation timeout",
+                    inline=False
+                )
+                
+                await message.reply(embed=error_embed)
+
+    # Create music command using ComfyUI
+    elif content.startswith('!music '):
+        prompt = message.content.strip()[7:].strip()  # Remove "!music " prefix
+        
+        if not prompt:
+            await message.reply('❌ Please provide a description for the music. Example: `!music upbeat electronic dance music with synthesizers`')
+            return
+
+        async with message.channel.typing():
+            try:
+                logger.info(f'🎵 Processing music generation from {message.author.name}: "{prompt}"')
+                
+                # Generate music with ComfyUI
+                audio_data, filename = await myai.create_music_with_comfyui(prompt)
+                
+                logger.info(f'Music generated successfully: {len(audio_data)} bytes, filename: {filename}')
+                
+                # Check file size (Discord limit is 8MB for regular users, 50MB for Nitro)
+                if len(audio_data) > 8 * 1024 * 1024:  # 8MB limit
+                    await message.reply(f'❌ Generated music file is too large ({len(audio_data)/(1024*1024):.1f}MB). Discord limit is 8MB for regular users.')
+                    return
+                
+                # Create audio file attachment
+                audio_file = discord.File(io.BytesIO(audio_data), filename=f"generated_music_{message.id}.mp3")
+                
+                logger.info(f'Created audio file attachment, sending {len(audio_data)} bytes...')
+                
+                # Send the music file with simple message
+                await message.reply(
+                    f"🎵 **Generated Music**\n"
+                    f"**Prompt:** {prompt}\n"
+                    f"**Duration:** 30 seconds | **Size:** {len(audio_data)/(1024*1024):.1f}MB", 
+                    file=audio_file
+                )
+                logger.info('Music file sent successfully to Discord')
+                
+            except Exception as e:
+                logger.error(f'Error generating music: {str(e)}')
+                
+                error_embed = discord.Embed(
+                    title="❌ Music Generation Error",
+                    description="Sorry, I couldn't generate the music. Please try again later.",
+                    color=0xFF0000,
+                    timestamp=message.created_at
+                )
+                error_embed.add_field(
+                    name="Possible Issues",
+                    value="• ComfyUI server might be down\n• Audio models not loaded in ComfyUI\n• Network connectivity issues\n• Queue might be full\n• Audio generation timeout",
                     inline=False
                 )
                 
@@ -984,6 +1252,11 @@ async def on_message(message):
         help_embed.add_field(
             name="🎬 Generate Videos",
             value="`!video <description>`\nGenerate videos using ComfyUI (e.g., `!video a fox running in the forest`)",
+            inline=False
+        )
+        help_embed.add_field(
+            name="🎵 Generate Music",
+            value="`!music <description>`\nGenerate music using ComfyUI (e.g., `!music upbeat electronic dance music`)",
             inline=False
         )
         help_embed.add_field(
