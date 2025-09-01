@@ -98,6 +98,9 @@ A comprehensive AI Discord bot that integrates with Ollama and ComfyUI to provid
 - `!models` or `!model list` - List all available Ollama models
 - `!llm <model_name>` - Change the AI model (e.g., `!llm llava` for image analysis)
 
+### Music Configuration (Admin Only)
+- `!music_tags <tags>` - Configure music generation style tags (e.g., `!music_tags electronic, upbeat, dance`)
+
 ### Admin Commands
 - `!shutdown` or `!myai shutdown` - Shutdown bot (admin only)
 
@@ -118,6 +121,7 @@ When inviting the bot to your server, make sure to grant these permissions:
 - **Image generation not working**: Ensure ComfyUI is running on port 8188 with required models
 - **Video generation not working**: Ensure ComfyUI has video models loaded (wan2.1_t2v, umt5_xxl, wan_2.1_vae)
 - **Music generation not working**: Ensure ComfyUI has audio models loaded (ace_step_v1_3.5b.safetensors)
+- **Music style customization**: Use `!music_tags` to configure genre, instruments, mood, and style tags
 - **Image analysis not working**: Use a vision model like `!llm llava`
 - **Permission errors**: Ensure the bot has proper permissions in the channel
 - **Large files failing**: Keep images under 5MB and audio/video under 8MB for optimal processing
